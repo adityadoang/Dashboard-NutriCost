@@ -1,3 +1,4 @@
 *.csv
 .env
 documentation/
+utils/trained_models/
