@@ -318,10 +318,10 @@ if st.session_state.get('generate_clicked', False):
                     st.metric(label="Penghematan Anggaran", value=f"Rp {selisih_pagu:,.0f}", delta=f"{delta_pct:.1f}% Efisiensi")
             with col3:
                 with st.container(border=True):
-                    st.metric(label="Total Energi (Kcal)", value=f"{target_kkal:,.0f}")
+                    st.metric(label="Total Energi (Kcal)", value=f"{target_kkal:,.0f}", delta="Sesuai Target", delta_color="off")
             with col4:
                 with st.container(border=True):
-                    st.metric(label="Total Protein (g)", value=f"{target_protein:,.1f}")
+                    st.metric(label="Total Protein (g)", value=f"{target_protein:,.1f}", delta="Sesuai Target", delta_color="off")
             
             # Proyeksi Skalabilitas
             total_biaya_harian = total_cost * jumlah_anak
