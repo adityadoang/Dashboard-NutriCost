@@ -262,6 +262,70 @@ def get_trend_data(target_kkal, target_protein, df_nutrition):
                 })
     return pd.DataFrame(trend_results)
 
+@st.cache_data
+def get_price_trend_data(df_nutrition):
+    df = pd.read_csv(DATA_CLEAN_PATH)
+    all_commodities = df['variant_nama'].unique()
+    available_items = [item for item in all_commodities if item in df_nutrition.index]
+    
+    hist_dates = sorted(df['tanggal'].unique())[-7:]
+    trend_prices = {d: {} for d in hist_dates}
+    
+    last_date = pd.to_datetime(hist_dates[-1])
+    future_dates = [(last_date + pd.Timedelta(days=i)).strftime('%Y-%m-%d') for i in range(1, 8)]
+    for d in future_dates:
+        trend_prices[d] = {}
+        
+    for commodity in available_items:
+        safe_filename = commodity.replace(" ", "_").replace("/", "_")
+        model_path = os.path.join(MODEL_DIR, f"xgb_{safe_filename}.joblib")
+        if not os.path.exists(model_path):
+            continue
+            
+        model = joblib.load(model_path)
+        df_model = df[df['variant_nama'] == commodity].sort_values('tanggal')
+        
+        for d in hist_dates:
+            val = df_model[df_model['tanggal'] == d]['harga']
+            if not val.empty:
+                trend_prices[d][commodity] = float(val.iloc[0])
+            else:
+                trend_prices[d][commodity] = float(df_model['harga'].iloc[-1])
+                
+        features = ['day', 'day_of_week', 'is_weekend', 'price_lag_1', 'price_lag_2', 'price_lag_3', 'rolling_mean_7d']
+        history_prices = df_model['harga'].tolist()[-7:]
+        
+        for i, f_date in enumerate(future_dates):
+            f_dt = pd.to_datetime(f_date)
+            X_pred = pd.DataFrame([[f_dt.day, f_dt.dayofweek, 1 if f_dt.dayofweek >= 5 else 0, 
+                                    history_prices[-1], history_prices[-2], history_prices[-3], 
+                                    sum(history_prices[-7:]) / 7.0]], columns=features)
+            pred_price = model.predict(X_pred)[0]
+            trend_prices[f_date][commodity] = float(pred_price)
+            history_prices.append(float(pred_price))
+            
+    trend_results = []
+    last_hist_date = hist_dates[-1]
+    for d in hist_dates + future_dates:
+        prices = trend_prices[d]
+        if not prices: continue
+        
+        for commodity, price in prices.items():
+            trend_results.append({
+                'Tanggal': d,
+                'Komoditas': commodity,
+                'Harga': price,
+                'Tipe': 'Historis' if d in hist_dates else 'Prediksi'
+            })
+            if d == last_hist_date:
+                trend_results.append({
+                    'Tanggal': d,
+                    'Komoditas': commodity,
+                    'Harga': price,
+                    'Tipe': 'Prediksi'
+                })
+    return pd.DataFrame(trend_results)
+
 predicted_prices_tomorrow = predict_prices()
 df_nutrition = load_nutrition_data()
 available_items = [item for item in predicted_prices_tomorrow.keys() if item in df_nutrition.index]
@@ -305,12 +369,9 @@ if st.button("Generate Rekomendasi Menu", use_container_width=True, type="primar
                           color_discrete_map={'Historis': '#3b82f6', 'Prediksi': '#ef4444'},
                           title="Pergerakan Biaya Optimal per Anak")
             fig.update_layout(yaxis_title='Biaya (Rp)', xaxis_title='Tanggal',
-                              yaxis=dict(range=[0, 10000]),
                               hovermode="x unified", margin=dict(l=0, r=0, t=40, b=0))
             fig.update_traces(line=dict(width=3))
             st.plotly_chart(fig, use_container_width=True)
-            
-            st.markdown('<div class="section-header">Rekomendasi Bahan Baku per Porsi Besok</div>', unsafe_allow_html=True)
             
             resep_items = []
             gramasi = []
@@ -323,6 +384,24 @@ if st.button("Generate Rekomendasi Menu", use_container_width=True, type="primar
                     resep_items.append(item)
                     gramasi.append(f"{qty_kg * 1000:.0f} g")
                     estimasi_biaya.append(f"Rp {cost_item:,.0f}")
+            
+            st.markdown('<div class="section-header">Tren Harga Per Bahan Pokok (7 Hari Terakhir & 7 Hari Kedepan)</div>', unsafe_allow_html=True)
+            df_price_trend = get_price_trend_data(df_nutrition)
+            
+            fig_price = px.line(df_price_trend, x='Tanggal', y='Harga', color='Komoditas', line_dash='Tipe', markers=True,
+                          title="Pergerakan Harga Masing-masing Bahan Pokok")
+            fig_price.update_layout(yaxis_title='Harga (Rp)', xaxis_title='Tanggal',
+                              hovermode="x unified", margin=dict(l=0, r=0, t=40, b=0))
+            
+            def update_trace(trace):
+                if not any(req_item in trace.name for req_item in resep_items):
+                    trace.visible = 'legendonly'
+            fig_price.for_each_trace(update_trace)
+            
+            fig_price.update_traces(line=dict(width=2))
+            st.plotly_chart(fig_price, use_container_width=True)
+            
+            st.markdown('<div class="section-header">Rekomendasi Bahan Baku per Porsi Besok</div>', unsafe_allow_html=True)
                     
             data_resep = {
                 "Komoditas": resep_items,
