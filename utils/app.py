@@ -113,36 +113,85 @@ def load_nutrition_data():
     return df_nutrition
 
 def calculate_optimal_budget(prices_dict, target_kkal, target_protein, df_nutrition, available_items):
+    if not available_items:
+        return None, None, None, None
+
     lp_problem = LpProblem("NutriCost_Diet_Optimization", LpMinimize)
     x = LpVariable.dicts("qty_kg", available_items, lowBound=0, cat='Continuous')
-    
+
+    # ── VARIABEL BINER: Pilih hanya 1 jenis per grup ──────────────────────────
+    pakai_minyak_curah   = LpVariable('Pakai_Minyak_Curah',   cat='Binary')
+    pakai_minyak_premium = LpVariable('Pakai_Minyak_Premium', cat='Binary')
+    pakai_minyakita      = LpVariable('Pakai_Minyakita',      cat='Binary')
+
+    pakai_beras_premium  = LpVariable('Pakai_Beras_Premium',  cat='Binary')
+    pakai_beras_medium   = LpVariable('Pakai_Beras_Medium',   cat='Binary')
+
     # 1. FUNGSI OBJEKTIF
     lp_problem += lpSum([prices_dict[i] * x[i] for i in available_items]), "Total_Cost"
-    
+
     # 2. KENDALA GIZI
     lp_problem += lpSum([df_nutrition.loc[i, 'Energi'] * x[i] for i in available_items]) >= target_kkal, "Min_Energy"
     lp_problem += lpSum([df_nutrition.loc[i, 'Protein'] * x[i] for i in available_items]) >= target_protein, "Min_Protein"
-    
-    # 3. KENDALA LOGIKA MANUSIA
+
+    # 3. KENDALA LOGIKA MANUSIA (Porsi 1x Makan Siang Anak 6-12 Tahun)
     for i in available_items:
+        # Makanan Pokok
         if 'Beras' in i:
-            lp_problem += x[i] >= 0.100
-            lp_problem += x[i] <= 0.250
+            lp_problem += x[i] <= 0.100  # 100g = 1 centong nasi penuh (nasi cetak mangkok)
+            # NOTE: Lower bound beras ditangani di bawah secara conditional via Big-M
         elif 'Terigu' in i:
-            lp_problem += x[i] <= 0.050
+            lp_problem += x[i] <= 0.020  # 20g = lapisan tepung ayam krispi / mendoan
         elif 'Gula' in i:
-            lp_problem += x[i] <= 0.020
+            lp_problem += x[i] <= 0.010  # 10g = batas pemanis dalam bumbu / minuman
         elif 'Minyak' in i:
-            lp_problem += x[i] <= 0.030
-        elif 'Cabai' in i or 'Bawang' in i:
-            lp_problem += x[i] <= 0.010
-            
+            lp_problem += x[i] <= 0.010  # 10g = ~1 sendok makan (menumis & menggoreng)
+        # Lauk & Protein
+        elif 'Ayam' in i:
+            lp_problem += x[i] <= 0.060  # 60g = 1 potong dada/paha ukuran sedang
+        elif 'Sapi' in i:
+            lp_problem += x[i] <= 0.050  # 50g = 2-3 potong daging rendang/semur kecil
+        elif 'Telur' in i:
+            lp_problem += x[i] <= 0.060  # 60g = 1 butir telur ayam ukuran besar
+        elif 'Kedelai' in i:
+            lp_problem += x[i] <= 0.025  # 25g = 1-2 potong tempe/tahu standar
+        # Bumbu (Sangat Dibatasi)
+        elif 'Bawang' in i:
+            lp_problem += x[i] <= 0.005  # 5g = standar bumbu dapur 1 porsi masakan
+        elif 'Cabai' in i:
+            lp_problem += x[i] <= 0.003  # 3g = pemberi rasa/warna, ramah pencernaan anak
+
     protein_hewani_items = [i for i in available_items if 'Ayam' in i or 'Sapi' in i or 'Telur' in i]
     if protein_hewani_items:
         lp_problem += lpSum([x[i] for i in protein_hewani_items]) >= 0.050
-        
+
+    # ── CONSTRAINT MUTUAL EXCLUSION: Pilih Maks 1 Jenis per Grup ─────────────
+    lp_problem += pakai_minyak_curah + pakai_minyak_premium + pakai_minyakita <= 1, 'Pilih_Maks_1_Minyak'
+    lp_problem += pakai_beras_premium + pakai_beras_medium <= 1,                    'Pilih_Maks_1_Beras'
+
+    # ── CONSTRAINT BIG-M: Hubungkan biner ke variabel gramatur ───────────────
+    M = 1.0
+    if 'Minyak Goreng Sawit Curah' in available_items:
+        lp_problem += x['Minyak Goreng Sawit Curah']          <= M * pakai_minyak_curah,   'BigM_Minyak_Curah'
+    if 'Minyak Goreng Sawit Kemasan Premium' in available_items:
+        lp_problem += x['Minyak Goreng Sawit Kemasan Premium'] <= M * pakai_minyak_premium, 'BigM_Minyak_Premium'
+    if 'Minyakita' in available_items:
+        lp_problem += x['Minyakita']                           <= M * pakai_minyakita,      'BigM_Minyakita'
+
+    if 'Beras Premium' in available_items:
+        lp_problem += x['Beras Premium'] <= M * pakai_beras_premium, 'BigM_Beras_Premium'
+    if 'Beras Medium' in available_items:
+        lp_problem += x['Beras Medium']  <= M * pakai_beras_medium,  'BigM_Beras_Medium'
+
+    # ── FIX: CONDITIONAL LOWER BOUND untuk Beras (via Big-M) ─────────────────
+    # Jika biner=1 -> x >= 0.070 (minimal 70g porsi anak); jika biner=0 -> x >= 0 (bebas)
+    if 'Beras Premium' in available_items:
+        lp_problem += x['Beras Premium'] >= 0.070 * pakai_beras_premium, 'MinBeras_Premium'
+    if 'Beras Medium' in available_items:
+        lp_problem += x['Beras Medium']  >= 0.070 * pakai_beras_medium,  'MinBeras_Medium'
+
     lp_problem.solve(PULP_CBC_CMD(msg=False))
-    
+
     if LpStatus[lp_problem.status] == 'Optimal':
         total_cost = value(lp_problem.objective)
         actual_kcal = sum(x[i].varValue * df_nutrition.loc[i, 'Energi'] for i in available_items)
@@ -219,9 +268,9 @@ available_items = [item for item in predicted_prices_tomorrow.keys() if item in 
 
 with st.sidebar:
     st.markdown("**Konfigurasi Target**")
-    st.caption("Sesuaikan kebutuhan minimum gizi harian per anak:")
-    target_kkal = st.slider("Target Energi (Kcal)", 1500, 2500, 2000, step=50)
-    target_protein = st.slider("Target Protein (gram)", 40, 70, 50, step=1)
+    st.caption("Sesuaikan kebutuhan minimum gizi per porsi makan siang anak (⅓ kebutuhan harian):")
+    target_kkal = st.slider("Target Energi (Kcal)", 400, 1000, 700, step=50)
+    target_protein = st.slider("Target Protein (gram)", 10, 40, 20, step=1)
     
     st.markdown("---")
     st.caption("Data harga pasar diprediksi menggunakan model XGBoost untuk mendapatkan estimasi harga terbaru.")
@@ -261,7 +310,7 @@ if st.button("Generate Rekomendasi Menu", use_container_width=True, type="primar
             fig.update_traces(line=dict(width=3))
             st.plotly_chart(fig, use_container_width=True)
             
-            st.markdown('<div class="section-header">Rincian Bahan Baku Besok</div>', unsafe_allow_html=True)
+            st.markdown('<div class="section-header">Rekomendasi Bahan Baku per Porsi Besok</div>', unsafe_allow_html=True)
             
             resep_items = []
             gramasi = []
