@@ -8,9 +8,23 @@ import plotly.express as px
 # Konfigurasi Halaman
 st.set_page_config(page_title="NutriCost AI", layout="wide")
 
-# Custom CSS untuk desain profesional dan minimalis yang mendukung Light & Dark Mode
+import streamlit.components.v1 as components
+
+# Injeksi meta tag tepat ke dalam <head> HTML menggunakan JavaScript
+components.html(
+    """
+    <script>
+        const meta = document.createElement('meta');
+        meta.name = "dicoding:email";
+        meta.content = "naufalsatrioputra@gmail.com";
+        window.parent.document.getElementsByTagName('head')[0].appendChild(meta);
+    </script>
+    """,
+    height=0,
+    width=0,
+)
+
 st.markdown("""
-<meta name="dicoding:email" content="naufalsatrioputra@gmail.com">
 <style>
     /* Tipografi dasar */
     .main-title {
