@@ -10,6 +10,7 @@ st.set_page_config(page_title="NutriCost AI", layout="wide")
 
 # Custom CSS untuk desain profesional dan minimalis yang mendukung Light & Dark Mode
 st.markdown("""
+<meta name="dicoding:email" content="naufalsatrioputra@gmail.com">
 <style>
     /* Tipografi dasar */
     .main-title {
