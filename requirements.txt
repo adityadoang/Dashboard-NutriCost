@@ -1,2 +1,9 @@
-pandas~=2.2
+streamlit
+pandas
+numpy
+xgboost
+joblib
+pulp
+azure-ai-ml
+azure-identity
 plotly
