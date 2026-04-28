@@ -210,7 +210,7 @@ def calculate_optimal_budget(prices_dict, target_kkal, target_protein, df_nutrit
     return None, None, None, None
 
 @st.cache_data
-def get_trend_data(target_kkal, target_protein, df_nutrition):
+def get_trend_data(df_nutrition):
     df = pd.read_csv(DATA_CLEAN_PATH)
     all_commodities = df['variant_nama'].unique()
     available_items = [item for item in all_commodities if item in df_nutrition.index]
@@ -286,7 +286,7 @@ with st.sidebar:
     st.markdown("---")
     st.markdown("**Konfigurasi Skala Program**")
     st.caption("Digunakan untuk proyeksi total anggaran:")
-    jumlah_anak = st.number_input("Target Porsi Harian", min_value=1, value=58300000, step=1000000)
+    jumlah_anak = st.number_input("Target Porsi Harian", min_value=1, value=82900000, step=1000000)
     hari_aktif_bulan = st.number_input("Hari Aktif per Bulan", min_value=1, max_value=31, value=22, step=1)
     hari_aktif_tahun = hari_aktif_bulan * 12
     
@@ -355,8 +355,10 @@ if st.session_state.get('generate_clicked', False):
                     st.metric(label="Anggaran Pagu Standar", value=format_rupiah(pagu_tahunan))
                     st.metric(label="Anggaran NutriCost AI", value=format_rupiah(total_biaya_tahunan), delta=f"Hemat {format_rupiah(penghematan_tahunan)} ({delta_pct:.1f}%)")
             
+            st.info(" **Catatan:** Anggaran yang ditampilkan di atas murni merupakan estimasi biaya bahan baku mentah (makanan pokok, lauk, dan bumbu). Perhitungan ini belum termasuk biaya operasional seperti logistik, tenaga masak, distribusi, gas, dan kemasan.")
+            
             st.markdown('<div class="section-header">Tren Harga Per Bahan Pokok (7 Hari Terakhir & 7 Hari Kedepan)</div>', unsafe_allow_html=True)
-            df_trend = get_trend_data(target_kkal, target_protein, df_nutrition)
+            df_trend = get_trend_data(df_nutrition)
             
             all_trend_commodities = sorted(df_trend['Komoditas'].unique())
             default_commodity = [all_trend_commodities[0]] if all_trend_commodities else []
