@@ -1,6 +1,4 @@
-# 🍚 NutriCost: Prediksi Harga Pangan & Optimasi Menu Bergizi Murah
-
-> **METC Datathon 2026** — Solusi berbasis Machine Learning & Linear Programming untuk menekan biaya pemenuhan gizi anak dan mencegah stunting.
+# 🍚 NutriCost:  Implementasi Model Hybrid Predictive-Prescriptive menggunakan XGBoost dan Operations Research untuk Mitigasi Inflasi Pangan dan Optimalisasi Anggaran Program Pangan Bergizi Nasional 
 
 ---
 
@@ -357,12 +355,6 @@ pip install pandas numpy xgboost scikit-learn joblib pulp matplotlib seaborn
 - [ ] **Prediksi multi-step** — Perencanaan menu mingguan (7 hari ke depan)
 - [ ] **Dashboard Streamlit** — Visualisasi interaktif rekomendasi menu harian
 - [ ] **Tambah komoditas** — Sayur dan buah untuk memenuhi kebutuhan serat
-
----
-
-## 👥 Tim
-
-**METC Datathon 2026**
 
 ---
 
