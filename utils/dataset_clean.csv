@@ -1,4 +1,4 @@
-,variant_id,variant_nama,satuan_display,tanggal,harga,day,day_of_week,is_weekend,price_lag_1,price_lag_2,price_lag_3,rolling_mean_7d
+no,variant_id,variant_nama,satuan_display,tanggal,harga,day,day_of_week,is_weekend,price_lag_1,price_lag_2,price_lag_3,rolling_mean_7d
 0,2,Cabai Merah Keriting,kg,2026-01-04,45944.0,4,6,1,46609.0,47274.0,47274.0,46775.25
 1,2,Cabai Merah Keriting,kg,2026-01-05,45279.0,5,0,0,45944.0,46609.0,47274.0,46476.0
 2,2,Cabai Merah Keriting,kg,2026-01-06,44017.0,6,1,0,45279.0,45944.0,46609.0,46066.166666666664
