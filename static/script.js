@@ -1,264 +1,408 @@
 document.addEventListener('DOMContentLoaded', () => {
-    // Format Rupiah
-    const formatRp = (angka) => {
-        return new Intl.NumberFormat('id-ID', {
-            style: 'currency',
-            currency: 'IDR',
-            minimumFractionDigits: 0
-        }).format(angka);
+
+    // ── Format Rupiah penuh ──
+    const fmt = (v) => new Intl.NumberFormat('id-ID', {
+        style: 'currency', currency: 'IDR', minimumFractionDigits: 0
+    }).format(v);
+
+    // ── Format pintar: singkat miliar/triliun, hover untuk detail ──
+    const fmtSmart = (val) => {
+        const abs = Math.abs(val);
+        if (abs >= 1e12) return `~${(val / 1e12).toFixed(1).replace('.', ',')} Triliun`;
+        if (abs >= 1e9) return `~${(val / 1e9).toFixed(1).replace('.', ',')} Miliar`;
+        if (abs >= 1e6) return `~${(val / 1e6).toFixed(1).replace('.', ',')} Juta`;
+        return fmt(val);
     };
 
-    // Elements
-    const optimizerForm = document.getElementById('optimizer-form');
-    const loadingOverlay = document.getElementById('loading-overlay');
-    const errorBanner = document.getElementById('error-banner');
-    const errorText = document.getElementById('error-text');
-    
-    const resCost = document.getElementById('res-cost');
-    const resKcal = document.getElementById('res-kcal');
-    const resProtein = document.getElementById('res-protein');
-    const recommendationsTableBody = document.querySelector('#recommendations-table tbody');
-    const commoditySelect = document.getElementById('commodity-select');
-    
-    // Savings Elements
-    const savingsSection = document.getElementById('savings-section');
-    const savePortion = document.getElementById('save-portion');
-    const saveDay = document.getElementById('save-day');
-    const saveMonth = document.getElementById('save-month');
-    const saveYear = document.getElementById('save-year');
-    
-    let costChartInstance = null;
-    let trendChartInstance = null;
-    let priceDataGlobal = null;
+    // Set text with smart format + tooltip detail
+    const setSmartValue = (el, val) => {
+        el.textContent = fmtSmart(val);
+        el.title = fmt(val); // hover untuk lihat angka lengkap
+        el.style.cursor = 'help';
+    };
 
-    // Load Prices on startup
+    // ── Elements ──
+    const form = document.getElementById('optimizer-form');
+    const overlay = document.getElementById('loading-overlay');
+    const errBanner = document.getElementById('error-banner');
+    const errText = document.getElementById('error-text');
+    const comSelect = document.getElementById('commodity-select');
+
+    let optCostChart = null, trendChart = null, priceData = null;
+
+    // ── Chart.js theme ──
+    Chart.defaults.color = '#9b9590';
+    Chart.defaults.font.family = "'Plus Jakarta Sans', sans-serif";
+    Chart.defaults.font.size = 11;
+
+    const warmColors = [
+        '#1b6b4d', '#c8842a', '#c25848', '#6a5acd', '#3d8b6a',
+        '#d4a843', '#e07b5f', '#5b8fb9', '#8fbc5a', '#b07cc6'
+    ];
+
+    const chartTooltip = {
+        backgroundColor: '#ffffff',
+        titleColor: '#2a2521',
+        bodyColor: '#5c5550',
+        borderColor: '#e0dbd3',
+        borderWidth: 1,
+        padding: 10,
+        cornerRadius: 8,
+        titleFont: { weight: '700' },
+    };
+
+    // ── Nav scroll + IntersectionObserver ──
+    const initNav = () => {
+        const allLinks = document.querySelectorAll('.nav-link');
+        allLinks.forEach(link => {
+            link.addEventListener('click', () => {
+                const id = link.dataset.section;
+                const el = document.getElementById(id);
+                if (el) {
+                    el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    allLinks.forEach(l => l.classList.remove('active'));
+                    document.querySelectorAll(`[data-section="${id}"]`).forEach(l => l.classList.add('active'));
+                }
+            });
+        });
+
+        const sections = document.querySelectorAll('.section');
+        const obs = new IntersectionObserver((entries) => {
+            entries.forEach(e => {
+                if (e.isIntersecting) {
+                    allLinks.forEach(l => l.classList.remove('active'));
+                    document.querySelectorAll(`[data-section="${e.target.id}"]`).forEach(l => l.classList.add('active'));
+                }
+            });
+        }, { rootMargin: '-30% 0px -60% 0px' });
+        sections.forEach(s => obs.observe(s));
+    };
+
+    // ── Drawer ──
+    const initDrawer = () => {
+        const drawer = document.getElementById('drawer');
+        const backdrop = document.getElementById('drawer-backdrop');
+        const open = () => { drawer.classList.add('open'); backdrop.classList.add('open'); };
+        const close = () => { drawer.classList.remove('open'); backdrop.classList.remove('open'); };
+
+        document.getElementById('btn-drawer').addEventListener('click', open);
+        document.getElementById('btn-close-drawer').addEventListener('click', close);
+        backdrop.addEventListener('click', close);
+
+        // Simulasikan radio button untuk checkbox porsi
+        const portionCbs = document.querySelectorAll('.portion-cb');
+        portionCbs.forEach(cb => {
+            cb.addEventListener('change', function () {
+                if (this.checked) {
+                    portionCbs.forEach(other => {
+                        if (other !== this) other.checked = false;
+                    });
+                } else {
+                    // Jangan biarkan semuanya uncheck, paksa tetap check
+                    this.checked = true;
+                }
+            });
+        });
+
+        document.getElementById('btn-save-drawer').addEventListener('click', () => {
+            const initBudgetEl = document.getElementById('d-init-budget');
+            if (initBudgetEl) {
+                document.getElementById('initial-budget').value = initBudgetEl.value;
+                const displayBudget = document.getElementById('display-init-budget');
+                if (displayBudget) displayBudget.textContent = fmt(initBudgetEl.value);
+            }
+            const selectedPortion = document.querySelector('.portion-cb:checked');
+            const portionValue = selectedPortion ? selectedPortion.value : 3000;
+            document.getElementById('target-portions').value = portionValue;
+
+            // Update the display text on the dashboard
+            const displayPortion = document.getElementById('display-target-portions');
+            if (displayPortion) displayPortion.textContent = portionValue;
+
+            const activeDaysValue = document.getElementById('d-days').value;
+            document.getElementById('active-days').value = activeDaysValue;
+            const displayDays = document.getElementById('display-active-days');
+            if (displayDays) displayDays.textContent = activeDaysValue;
+
+            close();
+        });
+    };
+
+    // ── Load Prices ──
     const loadPrices = async () => {
         try {
-            console.log("Fetching price data...");
-            const response = await fetch('/api/prices');
-            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-            
-            const data = await response.json();
-            console.log("Price data received:", data);
-            
-            if (!data.prices || Object.keys(data.prices).length === 0) {
-                throw new Error("Data harga kosong dari server.");
-            }
+            const res = await fetch('/api/prices');
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const data = await res.json();
+            if (!data.prices || !Object.keys(data.prices).length) throw new Error('Data harga kosong.');
 
-            priceDataGlobal = data.prices;
-            
-            // Populate select
-            commoditySelect.innerHTML = '<option value="">-- Pilih Komoditas --</option>';
-            const commodities = Object.keys(priceDataGlobal).sort();
-            
-            commodities.forEach(commodity => {
-                const option = document.createElement('option');
-                option.value = commodity;
-                option.textContent = commodity;
-                commoditySelect.appendChild(option);
+            priceData = data.prices;
+            const items = Object.keys(priceData).sort();
+
+            const totalCommoditiesEl = document.getElementById('total-commodities');
+            if (totalCommoditiesEl) totalCommoditiesEl.textContent = items.length;
+
+            comSelect.innerHTML = '<option value="">— Pilih Komoditas —</option>';
+            items.forEach(c => {
+                const o = document.createElement('option');
+                o.value = c; o.textContent = c;
+                comSelect.appendChild(o);
             });
-            
-            // Render first commodity by default
-            if (commodities.length > 0) {
-                commoditySelect.value = commodities[0];
-                renderTrendChart(commodities[0]);
-            }
-            
-        } catch (error) {
-            console.error("Failed to load prices:", error);
-            commoditySelect.innerHTML = `<option value="">Error: ${error.message}</option>`;
-            errorText.innerText = "Gagal memuat data harga komoditas. Pastikan server berjalan dengan benar.";
-            errorBanner.classList.remove('hidden');
+
+            if (items.length) { comSelect.value = items[0]; renderTrend(items[0]); }
+        } catch (err) {
+            console.error(err);
+            comSelect.innerHTML = `<option>Error: ${err.message}</option>`;
+            errText.innerText = 'Gagal memuat data harga.';
+            errBanner.classList.remove('hidden');
         }
     };
 
-    // Render Trend Chart
-    const renderTrendChart = (commodity) => {
-        if (!commodity || !priceDataGlobal || !priceDataGlobal[commodity]) return;
-
-        const data = priceDataGlobal[commodity];
+    // ── Trend Chart ──
+    const renderTrend = (name) => {
+        if (!name || !priceData?.[name]) return;
+        const d = priceData[name];
         const ctx = document.getElementById('priceTrendChart').getContext('2d');
-        
-        const labels = [...data.historical_dates, data.predicted_date];
-        const historicalPrices = [...data.historical_prices, null];
-        const predictedPrices = new Array(data.historical_dates.length).fill(null);
-        predictedPrices.push(data.predicted_price);
-        
-        if (data.historical_prices.length > 0) {
-            predictedPrices[data.historical_prices.length - 1] = data.historical_prices[data.historical_prices.length - 1];
-        }
 
-        if (trendChartInstance) trendChartInstance.destroy();
+        const labels = [...d.historical_dates, d.predicted_date];
+        const hist = [...d.historical_prices, null];
+        const pred = new Array(d.historical_dates.length).fill(null);
+        pred.push(d.predicted_price);
+        if (d.historical_prices.length) pred[d.historical_prices.length - 1] = d.historical_prices.at(-1);
 
-        Chart.defaults.color = '#6b7280';
-        Chart.defaults.font.family = "'Inter', sans-serif";
+        const pMin = document.getElementById('price-min');
+        const pMax = document.getElementById('price-max');
+        const pPred = document.getElementById('price-predicted');
+        if (pMin) pMin.textContent = fmt(Math.min(...d.historical_prices));
+        if (pMax) pMax.textContent = fmt(Math.max(...d.historical_prices));
+        if (pPred) pPred.textContent = fmt(d.predicted_price);
 
-        trendChartInstance = new Chart(ctx, {
+        if (trendChart) trendChart.destroy();
+
+        trendChart = new Chart(ctx, {
             type: 'line',
             data: {
-                labels: labels,
+                labels,
                 datasets: [
                     {
-                        label: 'Harga Historis (7 Hari)',
-                        data: historicalPrices,
-                        borderColor: '#10b981',
-                        backgroundColor: 'rgba(16, 185, 129, 0.1)',
-                        borderWidth: 3,
-                        tension: 0.3,
-                        fill: true,
-                        pointRadius: 4,
-                        pointBackgroundColor: '#10b981'
+                        label: 'Historis (7 Hari)',
+                        data: hist,
+                        borderColor: '#1b6b4d',
+                        backgroundColor: 'rgba(27,107,77,0.06)',
+                        borderWidth: 2.5, tension: 0.35, fill: true,
+                        pointRadius: 5, pointBackgroundColor: '#1b6b4d',
+                        pointBorderColor: '#ffffff', pointBorderWidth: 2,
                     },
                     {
-                        label: 'Prediksi XGBoost (H+1)',
-                        data: predictedPrices,
-                        borderColor: '#f59e0b',
-                        backgroundColor: 'rgba(245, 158, 11, 0.1)',
-                        borderWidth: 3,
-                        borderDash: [5, 5],
-                        tension: 0.3,
-                        fill: false,
-                        pointRadius: 6,
-                        pointBackgroundColor: '#f59e0b'
+                        label: 'Prediksi (H+1)',
+                        data: pred,
+                        borderColor: '#c8842a',
+                        backgroundColor: 'rgba(200,132,42,0.06)',
+                        borderWidth: 2.5, borderDash: [6, 4], tension: 0.35, fill: false,
+                        pointRadius: 7, pointBackgroundColor: '#c8842a',
+                        pointBorderColor: '#ffffff', pointBorderWidth: 2,
                     }
                 ]
             },
             options: {
-                responsive: true,
-                maintainAspectRatio: false,
+                responsive: true, maintainAspectRatio: false,
                 plugins: {
-                    legend: { position: 'top', labels: { usePointStyle: true, boxWidth: 6 } },
-                    tooltip: {
-                        callbacks: {
-                            label: (ctx) => `${ctx.dataset.label}: ${formatRp(ctx.parsed.y)}`
-                        }
-                    }
+                    legend: { position: 'top', labels: { usePointStyle: true, boxWidth: 6, padding: 16 } },
+                    tooltip: { ...chartTooltip, callbacks: { label: (c) => `${c.dataset.label}: ${fmt(c.parsed.y)}` } }
                 },
                 scales: {
-                    y: { 
-                        beginAtZero: false,
-                        ticks: { callback: (val) => formatRp(val) },
-                        grid: { color: '#f3f4f6' }
-                    },
+                    y: { beginAtZero: false, ticks: { callback: (v) => fmt(v) }, grid: { color: '#eae6df' } },
                     x: { grid: { display: false } }
                 }
             }
         });
     };
 
-    commoditySelect.addEventListener('change', (e) => renderTrendChart(e.target.value));
+    comSelect.addEventListener('change', (e) => renderTrend(e.target.value));
 
-    // Render Pie Chart
-    const renderChart = (recommendations) => {
-        const ctx = document.getElementById('costChart').getContext('2d');
-        const labels = recommendations.map(r => r.item);
-        const data = recommendations.map(r => r.cost);
-        const colors = ['#10b981', '#3b82f6', '#6366f1', '#8b5cf6', '#ec4899', '#f43f5e', '#f59e0b', '#14b8a6'];
+    // ── Bar Chart ──
+    const renderBarChart = (recs, canvasId) => {
+        const ctx = document.getElementById(canvasId).getContext('2d');
+        if (optCostChart) optCostChart.destroy();
 
-        if (costChartInstance) costChartInstance.destroy();
+        let sorted = [...recs].sort((a, b) => b.cost - a.cost);
+        let labels = [];
+        let data = [];
+        let bgColors = [];
 
-        costChartInstance = new Chart(ctx, {
-            type: 'doughnut',
+        if (sorted.length <= 5) {
+            labels = sorted.map(r => r.item);
+            data = sorted.map(r => r.cost);
+            bgColors = warmColors.slice(0, sorted.length);
+        } else {
+            const top5 = sorted.slice(0, 5);
+            labels = top5.map(r => r.item);
+            data = top5.map(r => r.cost);
+            bgColors = warmColors.slice(0, 5);
+
+            const sumRest = sorted.slice(5).reduce((acc, r) => acc + r.cost, 0);
+            labels.push('Lainnya');
+            data.push(sumRest);
+            bgColors.push('#eae6df');
+        }
+
+        optCostChart = new Chart(ctx, {
+            type: 'bar',
             data: {
                 labels: labels,
                 datasets: [{
                     data: data,
-                    backgroundColor: colors,
-                    borderWidth: 2,
-                    borderColor: '#ffffff'
+                    backgroundColor: bgColors,
+                    borderRadius: 4
                 }]
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
-                cutout: '70%',
                 plugins: {
-                    legend: { position: 'right', labels: { boxWidth: 12, padding: 15 } },
-                    tooltip: {
-                        callbacks: {
-                            label: (ctx) => `${ctx.label}: ${formatRp(ctx.parsed)}`
-                        }
+                    legend: { display: false },
+                    tooltip: { ...chartTooltip, callbacks: { label: (c) => `Rp ${fmt(c.parsed.y).replace('Rp', '').trim()}` } }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        grid: { color: '#eae6df' },
+                        ticks: { callback: (v) => fmt(v) }
+                    },
+                    x: {
+                        grid: { display: false }
                     }
                 }
             }
         });
     };
 
-    // Handle Optimization
-    optimizerForm.addEventListener('submit', async (e) => {
+    // ── Optimize ──
+    form.addEventListener('submit', async (e) => {
         e.preventDefault();
-        errorBanner.classList.add('hidden');
-        loadingOverlay.classList.remove('hidden');
-        
+        errBanner.classList.add('hidden');
+        overlay.classList.remove('hidden');
+
         const payload = {
             target_kcal: parseFloat(document.getElementById('target-kcal').value) || 0,
-            target_protein: parseFloat(document.getElementById('target-protein').value) || 0,
-            max_budget: parseFloat(document.getElementById('max-budget').value) || 0
+            target_protein: parseFloat(document.getElementById('target-protein').value) || 0
         };
 
         try {
-            const response = await fetch('/api/optimize', {
+            const res = await fetch('/api/optimize', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
             });
-
-            const data = await response.json();
+            const data = await res.json();
 
             if (data.status === 'success') {
-                resCost.innerText = formatRp(data.total_cost);
-                resKcal.innerText = `${data.total_kcal} Kcal`;
-                resProtein.innerText = `${data.total_protein} g`;
+                document.getElementById('opt-stats').style.display = 'grid';
+                document.getElementById('opt-results').style.display = 'grid';
 
-                // Savings Logic
-                const initialBudget = parseFloat(document.getElementById('initial-budget').value) || 0;
-                const targetPortions = parseFloat(document.getElementById('target-portions').value) || 0;
-                const activeDays = parseFloat(document.getElementById('active-days').value) || 0;
+                document.getElementById('opt-cost').textContent = fmt(data.total_cost);
+                document.getElementById('opt-kcal').textContent = `${data.total_kcal} Kcal`;
+                document.getElementById('opt-protein').textContent = `${data.total_protein} g`;
 
-                const savingPerPortion = initialBudget - data.total_cost;
-                if (savingPerPortion > 0) {
-                    const savingPerDay = savingPerPortion * targetPortions;
-                    const savingPerMonth = savingPerDay * activeDays;
-                    savePortion.innerText = formatRp(savingPerPortion);
-                    saveDay.innerText = formatRp(savingPerDay);
-                    saveMonth.innerText = formatRp(savingPerMonth);
-                    saveYear.innerText = formatRp(savingPerMonth * 12);
+                // ROI and Efficiency Metrics
+                const ib = parseFloat(document.getElementById('initial-budget').value) || 0;
+                const tp = parseFloat(document.getElementById('target-portions').value) || 0;
+                const spp = ib - data.total_cost; // savings per portion
 
-                    const perc = initialBudget > 0 ? ((savingPerPortion / initialBudget) * 100).toFixed(1) : 0;
-                    document.getElementById('perc-portion').innerText = `${perc}% Lebih Hemat`;
-                    document.getElementById('perc-day').innerText = `${perc}% Lebih Hemat`;
-                    document.getElementById('perc-month').innerText = `${perc}% Lebih Hemat`;
-                    document.getElementById('perc-year').innerText = `${perc}% Lebih Hemat`;
-                    
-                    savingsSection.style.display = 'grid';
+                if (ib > 0) {
+                    const spd = spp > 0 ? spp * tp : 0; // surplus hari ini
+                    const efisiensi = ((spp / ib) * 100).toFixed(1);
+                    const extraPorsi = data.total_cost > 0 && spd > 0 ? Math.floor(spd / data.total_cost) : 0;
+
+                    // Hemat / Porsi
+                    setSmartValue(document.getElementById('opt-hemat-porsi'), spp > 0 ? spp : 0);
+
+                    // Sisa Dana Hari Ini
+                    setSmartValue(document.getElementById('opt-sisa-dana'), spd);
+
+                    // Efisiensi Biaya
+                    document.getElementById('opt-efisiensi').textContent = `${spp > 0 ? efisiensi : 0}%`;
+                    document.getElementById('opt-efisiensi').title = `Penghematan dari pagu ${fmt(ib)}`;
+                    document.getElementById('opt-efisiensi').style.cursor = 'help';
+
+                    // Potensi Ekstra Porsi
+                    const extraPorsiEl = document.getElementById('opt-extra-porsi');
+                    if (extraPorsiEl) {
+                        const fmtNumber = new Intl.NumberFormat('id-ID').format(extraPorsi);
+                        extraPorsiEl.textContent = `${fmtNumber} Porsi`;
+                        extraPorsiEl.title = `Bisa memberi makan ${fmtNumber} anak tambahan hari ini!`;
+                        extraPorsiEl.style.cursor = 'help';
+                    }
+
+                    document.getElementById('savings-section').style.display = 'grid';
                 } else {
-                    savingsSection.style.display = 'none';
+                    document.getElementById('savings-section').style.display = 'none';
                 }
 
-                recommendationsTableBody.innerHTML = '';
-                data.recommendations.forEach(r => {
+                // Table
+                const tbody = document.querySelector('#recommendations-table tbody');
+                tbody.innerHTML = '';
+                data.recommendations.forEach((r, i) => {
                     const tr = document.createElement('tr');
+                    tr.classList.add('fade-up');
+                    tr.style.animationDelay = `${i * 0.04}s`;
                     tr.innerHTML = `
                         <td><strong>${r.item}</strong></td>
                         <td>${r.qty_grams} g</td>
                         <td>${r.kcal}</td>
                         <td>${r.protein}</td>
-                        <td>${formatRp(r.cost)}</td>
-                    `;
-                    recommendationsTableBody.appendChild(tr);
+                        <td>${fmt(r.cost)}</td>`;
+                    tbody.appendChild(tr);
                 });
 
-                renderChart(data.recommendations);
-            } else {
-                throw new Error(data.message);
-            }
-        } catch (error) {
-            errorText.innerText = error.message;
-            errorBanner.classList.remove('hidden');
-        } finally {
-            loadingOverlay.classList.add('hidden');
-        }
+                renderBarChart(data.recommendations, 'optCostChart');
+            } else { throw new Error(data.message); }
+        } catch (err) {
+            errText.innerText = err.message;
+            errBanner.classList.remove('hidden');
+        } finally { overlay.classList.add('hidden'); }
     });
 
+    // ── Auto Calculate Active Days ──
+    const getActiveDays = () => {
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = now.getMonth();
+        let daysInMonth = new Date(year, month + 1, 0).getDate();
+        let activeDays = 0;
+        for (let i = 1; i <= daysInMonth; i++) {
+            const day = new Date(year, month, i).getDay();
+            if (day !== 0 && day !== 6) { // 0 = Sunday, 6 = Saturday
+                activeDays++;
+            }
+        }
+
+        // Update month label
+        const monthNames = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
+        const monthLabel = document.getElementById('current-month-label');
+        if (monthLabel) {
+            monthLabel.textContent = `${monthNames[month]} ${year}`;
+        }
+
+        return activeDays;
+    };
+    const autoActiveDays = getActiveDays();
+    const dDaysHidden = document.getElementById('d-days');
+    if (dDaysHidden) dDaysHidden.value = autoActiveDays;
+    const dDaysDrawerDisplay = document.getElementById('d-days-display');
+    if (dDaysDrawerDisplay) dDaysDrawerDisplay.textContent = autoActiveDays;
+    document.getElementById('active-days').value = autoActiveDays;
+
+    const displayActiveDays = document.getElementById('display-active-days');
+    if (displayActiveDays) displayActiveDays.textContent = autoActiveDays;
+
+    const initBudgetHidden = document.getElementById('initial-budget');
+    const displayInitBudget = document.getElementById('display-init-budget');
+    if (initBudgetHidden && displayInitBudget) {
+        displayInitBudget.textContent = fmt(initBudgetHidden.value);
+    }
+
+    initNav();
+    initDrawer();
     loadPrices();
 });

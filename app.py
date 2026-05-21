@@ -96,7 +96,6 @@ load_data_and_predict()
 class OptimizeRequest(BaseModel):
     target_kcal: float = 700.0
     target_protein: float = 20.0
-    max_budget: float = 0.0 # 0 means no limit
 
 @app.get("/")
 def read_root():
@@ -132,9 +131,7 @@ def optimize_diet(req: OptimizeRequest):
     lp_problem += pulp.lpSum([df_nutrition.loc[i, 'Energi'] * x[i] for i in available_items]) >= req.target_kcal, "Min_Energy"
     lp_problem += pulp.lpSum([df_nutrition.loc[i, 'Protein'] * x[i] for i in available_items]) >= req.target_protein, "Min_Protein"
     
-    # BUDGET KENDALA
-    if req.max_budget > 0:
-         lp_problem += pulp.lpSum([PREDICTED_PRICES[i]["predicted_price"] * x[i] for i in available_items]) <= req.max_budget, "Max_Budget"
+
 
     # KENDALA LOGIKA MANUSIA
     for i in available_items:

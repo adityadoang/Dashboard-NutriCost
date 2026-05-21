@@ -1,216 +1,284 @@
 <!DOCTYPE html>
 <html lang="id">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NutriCost Optimizer</title>
-    
-    <!-- Google Fonts: Inter -->
+    <title>NutriCost — Optimasi Biaya & Gizi Pangan</title>
+    <meta name="description"
+        content="Dashboard optimasi biaya pangan dan gizi program MBG menggunakan XGBoost dan Linear Programming.">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    
-    <!-- Font Awesome -->
+    <link
+        href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Fraunces:opsz,wght@9..144,600;9..144,700;9..144,800&display=swap"
+        rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    
-    <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
-    <!-- Custom CSS -->
     <link rel="stylesheet" href="/static/style.css">
 </head>
+
 <body>
-    <!-- Navbar -->
+
     <nav class="navbar">
-        <div class="brand">
-            <img src="/static/logo.png" alt="NutriCost Logo" id="nav-logo">
-            <h1>NutriCost <span>AI</span></h1>
+        <div class="nav-left">
+            <img src="/static/logo.png" alt="NutriCost" id="nav-logo">
+            <div class="nav-brand">NutriCost <span>AI</span></div>
+        </div>
+        <div class="nav-links" id="nav-links">
+            <button class="nav-link active" data-section="sec-optimize">Optimasi Menu</button>
+            <button class="nav-link" data-section="sec-prices">Prediksi Harga</button>
+        </div>
+        <div class="nav-right">
+            <button class="btn-settings" id="btn-drawer" title="Parameter Lanjutan">
+                <i class="fa-solid fa-gear"></i>
+            </button>
         </div>
     </nav>
 
-    <div class="container">
-        <!-- Configuration Panel (Sidebar) -->
-        <aside class="config-panel">
-            <h2 class="panel-title"><i class="fa-solid fa-sliders"></i> Parameter Gizi</h2>
-            
-            <form id="optimizer-form" class="controls">
-                <div class="control-group">
-                    <label for="target-kcal">Minimum Energi (Kcal)</label>
+    <div class="mobile-nav" id="mobile-nav">
+        <button class="nav-link active" data-section="sec-optimize">Optimasi Menu MBG</button>
+        <button class="nav-link" data-section="sec-prices">Prediksi Harga</button>
+    </div>
+
+    <div id="loading-overlay" class="loading-overlay hidden">
+        <div class="loader"></div>
+        <p>Menghitung komposisi optimal...</p>
+    </div>
+
+    <!-- Drawer -->
+    <div class="drawer-backdrop" id="drawer-backdrop"></div>
+    <aside class="drawer-panel" id="drawer">
+        <div class="drawer-top">
+            <h2>Parameter Lanjutan</h2>
+            <button class="btn-close" id="btn-close-drawer"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <form id="drawer-form">
+            <div class="field">
+                <label>Target Porsi Harian per Dapur</label>
+                <div style="display:flex; gap:1.5rem; margin-top:0.5rem;">
+                    <label style="display:flex; align-items:center; gap:0.4rem; font-weight:normal; cursor:pointer;">
+                        <input type="checkbox" class="portion-cb" value="2500"> 2500
+                    </label>
+                    <label style="display:flex; align-items:center; gap:0.4rem; font-weight:normal; cursor:pointer;">
+                        <input type="checkbox" class="portion-cb" value="3000" checked> 3000
+                    </label>
+                    <label style="display:flex; align-items:center; gap:0.4rem; font-weight:normal; cursor:pointer;">
+                        <input type="checkbox" class="portion-cb" value="3500"> 3500
+                    </label>
+                </div>
+            </div>
+            <div class="field">
+                <label>Hari Aktif (<span id="current-month-label">Bulan Ini</span>)</label>
+                <div
+                    style="display:flex; align-items:center; gap:0.75rem; background: var(--bg); padding:0.6rem 0.875rem; border: 1.5px solid var(--border); border-radius: var(--radius-sm); margin-top:0.5rem;">
+                    <i class="fa-regular fa-calendar-check" style="color:var(--amber); font-size:1.1rem;"></i>
+                    <span id="d-days-display"
+                        style="font-family:'Fraunces', serif; font-weight:800; font-size:1.25rem; color:var(--text);">22</span>
+                    <span
+                        style="color:var(--text-muted); font-size:0.8rem; font-weight:600; text-transform:uppercase;">Hari</span>
+                </div>
+                <small>Dihitung otomatis (Senin - Jumat)</small>
+                <input type="hidden" id="d-days" value="22">
+            </div>
+            <button type="button" class="btn-run" id="btn-save-drawer">
+                <i class="fa-solid fa-check"></i> Simpan
+            </button>
+        </form>
+    </aside>
+
+    <div class="main-wrapper">
+
+        <div id="error-banner" class="alert-bar hidden">
+            <i class="fa-solid fa-circle-exclamation"></i>
+            <span id="error-text">Terjadi kesalahan.</span>
+        </div>
+
+        <!-- ═══ OPTIMASI DIET (UTAMA, DI ATAS) ═══ -->
+        <section class="section" id="sec-optimize">
+            <div class="section-label"
+                style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem;">
+                <div style="display:flex; align-items:center; gap:0.5rem;">
+                    <div class="dot" style="background:var(--green);"></div>
+                    <h2>Optimasi Menu MBG</h2>
+                    <div class="tag">Linear Programming</div>
+                </div>
+                <div
+                    style="font-size:0.75rem; color:var(--text-muted); display:flex; align-items:center; gap:1.25rem; flex-wrap:wrap;">
+                    <div style="display:flex; align-items:center; gap:0.4rem;" title="Pagu Anggaran">
+                        <i class="fa-solid fa-wallet" style="opacity:0.6;"></i> Pagu: <span id="display-init-budget"
+                            style="font-weight:700; color:var(--text);">Rp 10.000</span>
+                    </div>
+                    <div style="display:flex; align-items:center; gap:0.4rem;" title="Target Porsi Harian">
+                        <i class="fa-solid fa-users" style="opacity:0.6;"></i> Target: <span
+                            id="display-target-portions" style="font-weight:700; color:var(--text);">3000</span> porsi
+                    </div>
+                    <div style="display:flex; align-items:center; gap:0.4rem;" title="Hari Aktif Bulan Ini">
+                        <i class="fa-regular fa-calendar-check" style="opacity:0.6;"></i> Hari Aktif: <span
+                            id="display-active-days" style="font-weight:700; color:var(--text);">22</span> hari
+                    </div>
+                </div>
+            </div>
+
+            <form id="optimizer-form" class="optim-form">
+                <div class="field">
+                    <label for="target-kcal"><i class="fa-solid fa-fire" style="color:var(--amber); margin-right:4px;"></i> Min. Energi (Kcal)</label>
                     <input type="number" id="target-kcal" value="700" min="0" step="any">
-                    <small>Batas bawah kalori per porsi.</small>
                 </div>
-
-                <div class="control-group">
-                    <label for="target-protein">Minimum Protein (g)</label>
+                <div class="field">
+                    <label for="target-protein"><i class="fa-solid fa-egg" style="color:var(--orange); margin-right:4px;"></i> Min. Protein (g)</label>
                     <input type="number" id="target-protein" value="20" min="0" step="any">
-                    <small>Batas bawah protein total.</small>
                 </div>
-
-                <div class="control-group">
-                    <label for="max-budget">Batas Anggaran (Rp)</label>
-                    <input type="number" id="max-budget" value="0" min="0" step="any">
-                    <small>Nilai 0 untuk optimasi cost absolut.</small>
+                <input type="hidden" id="initial-budget" value="10000">
+                <input type="hidden" id="target-portions" value="3000">
+                <input type="hidden" id="active-days" value="22">
+                <div class="field" style="padding-bottom:0;">
+                    <label style="visibility:hidden;">-</label>
+                    <button type="submit" class="btn-run" id="btn-optimize" style="margin-bottom:0; width:100%; justify-content:center; height:42px;">
+                        <i class="fa-solid fa-wand-magic-sparkles"></i> Optimasi
+                    </button>
                 </div>
-
-                <div class="control-group">
-                    <label for="initial-budget">Anggaran Awal MBG per Porsi (Rp)</label>
-                    <input type="number" id="initial-budget" value="10000" min="0" step="any">
-                    <small>Anggaran MBG per porsi saat ini.</small>
-                </div>
-
-                <div class="control-group">
-                    <label for="target-portions">Target Porsi Harian</label>
-                    <input type="number" id="target-portions" value="82900000" min="0" step="any">
-                    <small>Jumlah porsi yang dibagikan per hari.</small>
-                </div>
-
-                <div class="control-group">
-                    <label for="active-days">Hari Aktif per Bulan</label>
-                    <input type="number" id="active-days" value="22" min="1" max="31" step="1">
-                    <small>Jumlah hari efektif penyaluran MBG.</small>
-                </div>
-
-                <button type="submit" class="btn-primary" id="btn-optimize">
-                    <i class="fa-solid fa-calculator"></i> Proses Optimasi
-                </button>
             </form>
-        </aside>
 
-        <!-- Main Workspace -->
-        <main class="main-content">
-            <!-- Loading Overlay -->
-            <div id="loading-overlay" class="loading-overlay hidden">
-                <div class="spinner"></div>
-                <p>Mengeksekusi model optimasi PuLP...</p>
-            </div>
-
-            <!-- Error Alert -->
-            <div id="error-banner" class="alert-banner error hidden">
-                <i class="fa-solid fa-triangle-exclamation"></i>
-                <span id="error-text">Terjadi Kesalahan saat komputasi.</span>
-            </div>
-
-            <!-- Stats KPI Cards -->
-            <div class="stats-grid">
-                <div class="stat-card green">
-                    <div class="stat-header">
-                        <span class="stat-title">Total Estimasi Biaya</span>
-                        <i class="fa-solid fa-wallet stat-icon"></i>
+            <!-- KPI Results -->
+            <div class="hero-metrics" id="opt-stats" style="display:none;">
+                <div class="metric-card type-cost fade-up">
+                    <div class="metric-label">Biaya Optimal per Porsi <div class="metric-icon"><i
+                                class="fa-solid fa-coins"></i></div>
                     </div>
-                    <div class="stat-value highlight" id="res-cost">Rp 0</div>
+                    <div class="metric-value" id="opt-cost">Rp 0</div>
                 </div>
-                
-                <div class="stat-card blue">
-                    <div class="stat-header">
-                        <span class="stat-title">Pencapaian Energi</span>
-                        <i class="fa-solid fa-bolt stat-icon"></i>
+                <div class="metric-card type-energy fade-up">
+                    <div class="metric-label">Energi Tercapai <div class="metric-icon"><i class="fa-solid fa-fire"></i>
+                        </div>
                     </div>
-                    <div class="stat-value" id="res-kcal">0 Kcal</div>
+                    <div class="metric-value" id="opt-kcal">0 Kcal</div>
                 </div>
-
-                <div class="stat-card amber">
-                    <div class="stat-header">
-                        <span class="stat-title">Pencapaian Protein</span>
-                        <i class="fa-solid fa-drumstick-bite stat-icon"></i>
+                <div class="metric-card type-protein fade-up">
+                    <div class="metric-label">Protein Tercapai <div class="metric-icon"><i class="fa-solid fa-egg"></i>
+                        </div>
                     </div>
-                    <div class="stat-value" id="res-protein">0 g</div>
+                    <div class="metric-value" id="opt-protein">0 g</div>
                 </div>
             </div>
 
-            <!-- Savings KPI Cards -->
-            <div class="savings-grid" id="savings-section" style="display: none;">
-                <div class="stat-card green">
-                    <div class="stat-header">
-                        <span class="stat-title">Hemat per Porsi</span>
-                        <i class="fa-solid fa-piggy-bank stat-icon"></i>
-                    </div>
-                    <div class="stat-value" id="save-portion" style="font-size: 20px;">Rp 0</div>
-                    <div class="save-badge" id="perc-portion">0% Lebih Hemat</div>
-                </div>
-                
-                <div class="stat-card blue">
-                    <div class="stat-header">
-                        <span class="stat-title">Hemat per Hari</span>
-                        <i class="fa-solid fa-calendar-day stat-icon"></i>
-                    </div>
-                    <div class="stat-value" id="save-day" style="font-size: 20px;">Rp 0</div>
-                    <div class="save-badge" id="perc-day">0% Lebih Hemat</div>
-                </div>
-
-                <div class="stat-card purple">
-                    <div class="stat-header">
-                        <span class="stat-title">Hemat per Bulan</span>
-                        <i class="fa-solid fa-calendar-days stat-icon"></i>
-                    </div>
-                    <div class="stat-value" id="save-month" style="font-size: 20px;">Rp 0</div>
-                    <div class="save-badge" id="perc-month">0% Lebih Hemat</div>
-                </div>
-                
-                <div class="stat-card amber">
-                    <div class="stat-header">
-                        <span class="stat-title">Hemat per Tahun</span>
-                        <i class="fa-solid fa-calendar-check stat-icon"></i>
-                    </div>
-                    <div class="stat-value" id="save-year" style="font-size: 20px;">Rp 0</div>
-                    <div class="save-badge" id="perc-year">0% Lebih Hemat</div>
-                </div>
-            </div>
-
-            <!-- Analysis Section -->
-            <div class="content-grid">
-                <!-- Optimization Results Table -->
+            <!-- Table + Chart -->
+            <div class="results-grid" id="opt-results" style="display:none;">
                 <div class="card">
-                    <div class="card-header">
-                        <h3><i class="fa-solid fa-table"></i> Hasil Komposisi Diet</h3>
+                    <div class="card-head">
+                        <h3><i class="fa-solid fa-table-list"></i> Komposisi Menu</h3>
                     </div>
-                    <div class="table-container">
+                    <div class="table-wrap">
                         <table class="data-table" id="recommendations-table">
                             <thead>
                                 <tr>
                                     <th>Komoditas</th>
-                                    <th>Berat (g)</th>
-                                    <th>Energi (Kcal)</th>
-                                    <th>Protein (g)</th>
-                                    <th>Estimasi Harga</th>
+                                    <th>Berat</th>
+                                    <th>Energi</th>
+                                    <th>Protein</th>
+                                    <th>Harga</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 <tr>
-                                    <td colspan="5" class="text-center text-muted" style="padding: 24px;">Data belum tersedia. Silakan jalankan proses optimasi.</td>
+                                    <td colspan="5" class="text-center text-muted" style="padding:2rem;">
+                                        <div class="empty-msg"><i class="fa-solid fa-bowl-food"></i>
+                                            <p>Jalankan optimasi untuk melihat hasil.</p>
+                                        </div>
+                                    </td>
                                 </tr>
                             </tbody>
                         </table>
                     </div>
                 </div>
-
-                <!-- Cost Allocation Chart -->
                 <div class="card">
-                    <div class="card-header">
-                        <h3><i class="fa-solid fa-chart-pie"></i> Alokasi Biaya</h3>
+                    <div class="card-head">
+                        <h3><i class="fa-solid fa-chart-simple"></i> Alokasi Biaya</h3>
                     </div>
-                    <div class="chart-container">
-                        <canvas id="costChart"></canvas>
-                    </div>
+                    <div class="chart-area"><canvas id="optCostChart"></canvas></div>
                 </div>
             </div>
 
-            <!-- Price Trend Chart -->
-            <div class="card">
-                <div class="card-header trend-header" style="display: flex; justify-content: space-between; align-items: center;">
-                    <h3><i class="fa-solid fa-arrow-trend-up"></i> Historis & Prediksi Harga XGBoost (H+1)</h3>
-                    <select id="commodity-select" style="padding: 8px 12px; border: 1px solid var(--border-color); border-radius: 4px; font-size: 14px; background: white; outline: none; min-width: 200px;">
-                        <option value="">Memuat Komoditas...</option>
-                    </select>
+            <!-- Savings -->
+            <div class="savings-row" id="savings-section" style="display:none;">
+                <div class="metric-card type-save fade-up">
+                    <div class="metric-label">Hemat / Porsi <div class="metric-icon"><i
+                                class="fa-solid fa-piggy-bank"></i></div>
+                    </div>
+                    <div class="metric-value" id="opt-hemat-porsi" style="font-size:1.25rem;">Rp 0</div>
+                    <div class="metric-sub positive">Dari Pagu Awal</div>
                 </div>
-                <div class="chart-container" style="height: 350px;">
+                <div class="metric-card type-day fade-up">
+                    <div class="metric-label">Sisa Dana (Hari Ini) <div class="metric-icon"><i
+                                class="fa-solid fa-wallet"></i></div>
+                    </div>
+                    <div class="metric-value" id="opt-sisa-dana" style="font-size:1.25rem;">Rp 0</div>
+                    <div class="metric-sub positive">Surplus Anggaran</div>
+                </div>
+                <div class="metric-card type-month fade-up">
+                    <div class="metric-label">Efisiensi Biaya <div class="metric-icon"><i
+                                class="fa-solid fa-percent"></i></div>
+                    </div>
+                    <div class="metric-value" id="opt-efisiensi" style="font-size:1.25rem;">0%</div>
+                    <div class="metric-sub positive">Lebih Murah</div>
+                </div>
+                <div class="metric-card type-year fade-up">
+                    <div class="metric-label">Potensi Ekstra Porsi <div class="metric-icon"><i
+                                class="fa-solid fa-child-reaching"></i></div>
+                    </div>
+                    <div class="metric-value" id="opt-extra-porsi" style="font-size:1.25rem;">0 Porsi</div>
+                    <div class="metric-sub positive">Dari Sisa Dana</div>
+                </div>
+            </div>
+        </section>
+
+        <div class="divider"></div>
+
+
+
+        <!-- ═══ PREDIKSI HARGA ═══ -->
+        <section class="section" id="sec-prices">
+            <div class="section-label">
+                <div class="dot" style="background:var(--coral);"></div>
+                <h2>Prediksi Harga</h2>
+                <div class="tag">XGBoost H+1</div>
+            </div>
+
+            <div class="price-bar">
+                <select id="commodity-select" class="commodity-select">
+                    <option value="">Memuat komoditas...</option>
+                </select>
+            </div>
+
+            <div class="card">
+                <div class="chart-area" style="height:380px;">
                     <canvas id="priceTrendChart"></canvas>
                 </div>
             </div>
-            
-        </main>
+
+            <div class="price-pills">
+                <div class="metric-card type-cost fade-up">
+                    <div class="metric-label">Terendah (7 Hari) <div class="metric-icon"><i
+                                class="fa-solid fa-arrow-down"></i></div>
+                    </div>
+                    <div class="metric-value" id="price-min" style="font-size:1.2rem;">—</div>
+                </div>
+                <div class="metric-card type-energy fade-up">
+                    <div class="metric-label">Tertinggi (7 Hari) <div class="metric-icon"><i
+                                class="fa-solid fa-arrow-up"></i></div>
+                    </div>
+                    <div class="metric-value" id="price-max" style="font-size:1.2rem;">—</div>
+                </div>
+                <div class="metric-card type-protein fade-up">
+                    <div class="metric-label">Prediksi Besok <div class="metric-icon"><i
+                                class="fa-solid fa-forward"></i></div>
+                    </div>
+                    <div class="metric-value" id="price-predicted" style="font-size:1.2rem;">—</div>
+                </div>
+            </div>
+        </section>
     </div>
 
-    <!-- Script -->
-    <script src="/static/script.js?v=1.1"></script>
+    <script src="/static/script.js?v=4.0"></script>
 </body>
+
 </html>
