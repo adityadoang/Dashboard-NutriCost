@@ -1,12 +1,9 @@
 fastapi
 uvicorn
-streamlit
+gunicorn
+pydantic
 pandas
 numpy
 pulp
 xgboost
 joblib
-scikit-learn
-azure-ai-ml
-azure-identity
-plotly
