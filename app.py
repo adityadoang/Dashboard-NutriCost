@@ -14,7 +14,7 @@ app = FastAPI(title="NutriCost Optimizer API")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # Load Data and Models globally
-MODEL_DIR = 'trained_models'
+MODEL_DIR = 'improved/workflow/trained_models'
 df = None
 metadata_komoditas = None
 df_nutrition = None
