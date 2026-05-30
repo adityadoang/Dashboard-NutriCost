@@ -15,3 +15,8 @@ ENV/
 !dataset_transformed.csv
 !dataset_gizi.csv
 !trained_models/
+dataset.csv
+model_evaluation_report.csv
+documentation/
+utils/trained_models/
+*.pptx
