@@ -9,12 +9,11 @@ ENV/
 .vscode/
 .idea/
 *.ipynb
-!pulp_model.ipynb
-!model.ipynb
 # Keep datasets and models
 !dataset_transformed.csv
 !dataset_gizi.csv
 !trained_models/
+!trained_models/**
 dataset.csv
 model_evaluation_report.csv
 documentation/
