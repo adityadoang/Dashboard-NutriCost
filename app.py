@@ -99,7 +99,12 @@ class OptimizeRequest(BaseModel):
 
 @app.get("/")
 def read_root():
-    return FileResponse("static/index.html")
+    headers = {
+        "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+        "Pragma": "no-cache",
+        "Expires": "0"
+    }
+    return FileResponse("static/index.html", headers=headers)
 
 @app.get("/api/prices")
 def get_prices():
@@ -196,6 +201,29 @@ def optimize_diet(req: OptimizeRequest):
         total_kcal = 0
         total_protein = 0
         
+        # Sector Mapping for Financial Inclusion
+        SECTORS = {
+            'Beras SPHP Bulog': 'Petani Padi (UMKM)',
+            'Beras Medium': 'Petani Padi (UMKM)',
+            'Beras Premium': 'Petani Padi (UMKM)',
+            'Daging Ayam Ras': 'Peternak Unggas (UMKM)',
+            'Telur Ayam Ras': 'Peternak Unggas (UMKM)',
+            'Daging Sapi Paha Belakang': 'Peternak Sapi (UMKM)',
+            'Cabai Merah Keriting': 'Petani Hortikultura (UMKM)',
+            'Cabai Merah Besar': 'Petani Hortikultura (UMKM)',
+            'Cabai Rawit Merah': 'Petani Hortikultura (UMKM)',
+            'Bawang Merah': 'Petani Hortikultura (UMKM)',
+            'Bawang Putih Honan': 'Petani Hortikultura (UMKM)',
+            'Kedelai Impor': 'Petani Palawija (UMKM)',
+            'Gula Pasir Curah': 'Industri Pengolahan',
+            'Minyak Goreng Sawit Curah': 'Industri Pengolahan',
+            'Minyak Goreng Sawit Kemasan Premium': 'Industri Pengolahan',
+            'Minyakita': 'Industri Pengolahan',
+            'Tepung Terigu': 'Industri Pengolahan'
+        }
+        
+        financial_flow = {}
+        
         for item in available_items:
             qty_kg = x[item].varValue
             if qty_kg is not None and qty_kg > 0.001:
@@ -203,6 +231,9 @@ def optimize_diet(req: OptimizeRequest):
                 kcal_supplied = qty_kg * df_nutrition.loc[item, 'Energi']
                 protein_supplied = qty_kg * df_nutrition.loc[item, 'Protein']
                 cost_item = qty_kg * PREDICTED_PRICES[item]["predicted_price"]
+                
+                sector = SECTORS.get(item, 'Lainnya')
+                financial_flow[sector] = financial_flow.get(sector, 0) + cost_item
                 
                 recommendations.append({
                     "item": item,
@@ -220,6 +251,7 @@ def optimize_diet(req: OptimizeRequest):
             "total_cost": round(total_cost, 2),
             "total_kcal": round(total_kcal, 1),
             "total_protein": round(total_protein, 1),
+            "financial_flow": financial_flow,
             "recommendations": recommendations
         }
     else:

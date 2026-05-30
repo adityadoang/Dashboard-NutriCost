@@ -229,6 +229,47 @@
                     <div class="metric-sub positive">Dari Sisa Dana</div>
                 </div>
             </div>
+
+            <!-- Macroeconomic Impact Section -->
+            <div id="macro-section" style="display:none; margin-top: 2rem;">
+                <div class="section-label">
+                    <div class="dot" style="background:var(--blue);"></div>
+                    <h2>Dampak Makroekonomi Nasional</h2>
+                    <div class="tag">Simulasi APBN</div>
+                </div>
+                
+                <div class="hero-metrics" style="grid-template-columns: 1fr;">
+                    <div class="metric-card type-save fade-up" style="border: 2px solid var(--green); background: rgba(56, 178, 121, 0.05); text-align: center;">
+                        <div class="metric-label" style="justify-content: center; font-size: 1.1rem; text-transform: uppercase; letter-spacing: 1px;">
+                            Potensi Penghematan APBN Per Hari
+                            <div class="metric-icon"><i class="fa-solid fa-landmark"></i></div>
+                        </div>
+                        <div class="metric-value" id="macro-national-savings" style="font-size: 2.5rem; color: var(--green); margin: 10px 0;">Rp 0 Miliar</div>
+                        <div class="metric-sub positive" style="justify-content: center; font-size: 0.95rem;">Berdasarkan Target 82 Juta Anak</div>
+                    </div>
+                </div>
+                
+                <div class="results-grid" style="margin-top: 1.5rem;">
+                    <div class="card">
+                        <div class="card-head">
+                            <h3><i class="fa-solid fa-money-bill-transfer"></i> Proyeksi Inklusi Keuangan (Aliran Dana ke UMKM)</h3>
+                        </div>
+                        <div class="chart-area" style="height: 350px;">
+                            <canvas id="financialFlowChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <div class="card-head">
+                            <h3><i class="fa-solid fa-circle-info"></i> Rincian Aliran Dana & Komoditas Sektor</h3>
+                        </div>
+                        <div class="sector-details-list" id="sector-details-list">
+                            <div class="empty-msg"><i class="fa-solid fa-money-bill-wave"></i>
+                                <p>Jalankan optimasi untuk melihat rincian aliran dana.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </section>
 
         <div class="divider"></div>

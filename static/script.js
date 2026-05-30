@@ -28,7 +28,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const errText = document.getElementById('error-text');
     const comSelect = document.getElementById('commodity-select');
 
-    let optCostChart = null, trendChart = null, priceData = null;
+    let optCostChart = null, trendChart = null, financialFlowChart = null, priceData = null;
 
     // ── Chart.js theme ──
     Chart.defaults.color = '#9b9590';
@@ -277,6 +277,121 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     };
 
+    // ── Financial Flow Doughnut Chart ──
+    const renderFinancialFlowChart = (flowData) => {
+        const ctx = document.getElementById('financialFlowChart').getContext('2d');
+        if (financialFlowChart) financialFlowChart.destroy();
+
+        const TARGET_ANAK_NASIONAL = 82000000;
+
+        const sectorMetadata = {
+            'Petani Padi (UMKM)': {
+                icon: 'fa-solid fa-wheat-awn',
+                commodities: ['Beras SPHP Bulog', 'Beras Medium', 'Beras Premium'],
+                color: '#1b6b4d'
+            },
+            'Peternak Unggas (UMKM)': {
+                icon: 'fa-solid fa-egg',
+                commodities: ['Daging Ayam Ras', 'Telur Ayam Ras'],
+                color: '#e53e3e'
+            },
+            'Peternak Sapi (UMKM)': {
+                icon: 'fa-solid fa-cow',
+                commodities: ['Daging Sapi Paha Belakang'],
+                color: '#c25848'
+            },
+            'Petani Hortikultura (UMKM)': {
+                icon: 'fa-solid fa-pepper-hot',
+                commodities: ['Cabai Merah Keriting', 'Cabai Merah Besar', 'Cabai Rawit Merah', 'Bawang Merah', 'Bawang Putih Honan'],
+                color: '#6a5acd'
+            },
+            'Petani Palawija (UMKM)': {
+                icon: 'fa-solid fa-seedling',
+                commodities: ['Kedelai Impor'],
+                color: '#8fbc5a'
+            },
+            'Industri Pengolahan': {
+                icon: 'fa-solid fa-industry',
+                commodities: ['Gula Pasir Curah', 'Minyak Goreng Sawit Curah', 'Minyak Goreng Sawit Kemasan Premium', 'Minyakita', 'Tepung Terigu'],
+                color: '#d4a843'
+            },
+            'Lainnya': {
+                icon: 'fa-solid fa-ellipsis',
+                commodities: ['Komoditas lainnya'],
+                color: '#e07b5f'
+            }
+        };
+
+        // Sort and scale data by value (national daily flow)
+        const entries = Object.entries(flowData).map(e => [e[0], e[1] * TARGET_ANAK_NASIONAL]).sort((a, b) => b[1] - a[1]);
+        const labels = entries.map(e => e[0]);
+        const data = entries.map(e => e[1]);
+
+        const colors = labels.map(label => sectorMetadata[label]?.color || '#e07b5f');
+
+        financialFlowChart = new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: labels,
+                datasets: [{
+                    data: data,
+                    backgroundColor: colors,
+                    borderWidth: 2,
+                    borderColor: '#ffffff'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                cutout: '65%',
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: { padding: 15, usePointStyle: true, pointStyle: 'circle' }
+                    },
+                    tooltip: {
+                        ...chartTooltip,
+                        callbacks: {
+                            label: (c) => ` ${c.label}: ${fmtSmart(c.parsed)}`
+                        }
+                    }
+                }
+            }
+        });
+
+        // Render detail list
+        const listContainer = document.getElementById('sector-details-list');
+        if (listContainer) {
+            listContainer.innerHTML = '';
+            entries.forEach(([sector, value]) => {
+                const meta = sectorMetadata[sector] || sectorMetadata['Lainnya'];
+                const itemEl = document.createElement('div');
+                itemEl.className = 'sector-item fade-up';
+                itemEl.style.borderLeftColor = meta.color;
+
+                const commodityBadges = meta.commodities
+                    .map(c => `<span class="commodity-badge">${c}</span>`)
+                    .join('');
+
+                itemEl.innerHTML = `
+                    <div class="sector-icon-wrap" style="color: ${meta.color};">
+                        <i class="${meta.icon}"></i>
+                    </div>
+                    <div class="sector-info">
+                        <div class="sector-name-row">
+                            <span class="sector-name">${sector}</span>
+                            <span class="sector-flow-val" title="Aliran dana per porsi: ${fmt(value / TARGET_ANAK_NASIONAL)}">${fmtSmart(value)}/hari</span>
+                        </div>
+                        <div class="sector-commodities">
+                            ${commodityBadges}
+                        </div>
+                    </div>
+                `;
+                listContainer.appendChild(itemEl);
+            });
+        }
+    };
+
     // ── Optimize ──
     form.addEventListener('submit', async (e) => {
         e.preventDefault();
@@ -335,8 +450,26 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
 
                     document.getElementById('savings-section').style.display = 'grid';
+
+                    // Macroeconomic Impact
+                    const TARGET_ANAK_NASIONAL = 82000000;
+
+                    const macroSavingsEl = document.getElementById('macro-national-savings');
+                    if (spp > 0) {
+                        const nationalSavingsDaily = spp * TARGET_ANAK_NASIONAL;
+                        macroSavingsEl.textContent = fmtSmart(nationalSavingsDaily);
+                        macroSavingsEl.title = `Selisih Rp ${fmt(spp).replace('Rp', '').trim()} × 82 Juta Anak = ${fmt(nationalSavingsDaily)} per hari`;
+                        macroSavingsEl.style.cursor = 'help';
+                    } else {
+                        macroSavingsEl.textContent = "Rp 0 Miliar";
+                        macroSavingsEl.title = "Tidak ada penghematan dari pagu";
+                    }
+
+                    document.getElementById('macro-section').style.display = 'block';
+
                 } else {
                     document.getElementById('savings-section').style.display = 'none';
+                    document.getElementById('macro-section').style.display = 'none';
                 }
 
                 // Table
@@ -356,6 +489,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
 
                 renderBarChart(data.recommendations, 'optCostChart');
+
+                if (data.financial_flow) {
+                    renderFinancialFlowChart(data.financial_flow);
+                }
             } else { throw new Error(data.message); }
         } catch (err) {
             errText.innerText = err.message;
