@@ -3,3 +3,4 @@ model_evaluation_report.csv
 .env
 documentation/
 utils/trained_models/
+*.pptx
